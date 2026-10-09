@@ -1,0 +1,16 @@
+# Arquivos de runtime e cache do servidor
+server.jar
+cache/
+logs/
+plugins/
+libraries/
+versions/
+world/
+world_nether/
+world_the_end/
+*.log
+eula.txt
+
+# Dados locais de banco e contêiner
+*.pid
+.env
