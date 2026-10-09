@@ -27,3 +27,9 @@ spigot.yml
 version_history.json
 config/paper-global.yml
 config/paper-world-defaults.yml
+
+# Gradle build directories
+.gradle/
+build/
+core-plugin/.gradle/
+core-plugin/build/
