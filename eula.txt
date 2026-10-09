@@ -1,0 +1,2 @@
+# Termo EULA do Minecraft aceito para ambiente de desenvolvimento e produção
+eula=true
