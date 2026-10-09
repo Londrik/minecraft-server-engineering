@@ -55,10 +55,13 @@ log_info "Baixando Floodgate..."
 curl -fL -H "User-Agent: ${UA}" --progress-bar "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot" -o "${PLUGINS_DIR}/Floodgate-Spigot.jar"
 validate_jar "${PLUGINS_DIR}/Floodgate-Spigot.jar" 5
 
-# 4. ViaVersion (Compatibilidade de protocolo entre clientes novos e servidor)
+# 4. ViaVersion (Via Hangar API oficial PaperMC)
 log_info "Baixando ViaVersion estável..."
-curl -fL -H "User-Agent: ${UA}" --progress-bar "https://ci.viaversion.com/job/ViaVersion/lastSuccessfulBuild/artifact/build/libs/ViaVersion-5.2.1.jar" -o "${PLUGINS_DIR}/ViaVersion.jar" || \
-curl -fL -H "User-Agent: ${UA}" --progress-bar "https://github.com/ViaVersion/ViaVersion/releases/latest/download/ViaVersion.jar" -o "${PLUGINS_DIR}/ViaVersion.jar"
+VIA_URL=$(curl -sSL "https://hangar.papermc.io/api/v1/projects/ViaVersion/versions" | jq -r '.result[0].downloads.PAPER.downloadUrl // empty')
+if [[ -z "$VIA_URL" ]]; then
+  VIA_URL="https://hangar.papermc.io/api/v1/projects/ViaVersion/versions/5.2.1/PAPER/download"
+fi
+curl -fL -H "User-Agent: ${UA}" --progress-bar "$VIA_URL" -o "${PLUGINS_DIR}/ViaVersion.jar"
 validate_jar "${PLUGINS_DIR}/ViaVersion.jar" 2
 
 if [[ -f "${CONFIG_DIR}/geyser/config.yml" ]]; then
