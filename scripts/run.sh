@@ -15,53 +15,40 @@ log_err()   { echo -e "${C_RED}[ERRO]${C_RESET} $1"; }
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-# 1. Sanity Check: Binário Java
-if ! command -v java &>/dev/null; then
-  log_err "Java não encontrado no PATH. Instale o OpenJDK 21 via: sudo dnf install -y java-21-openjdk-headless"
+JAVA_BIN=""
+if [[ -x "$HOME/.jdks/temurin-21/bin/java" ]]; then
+  JAVA_BIN="$HOME/.jdks/temurin-21/bin/java"
+elif [[ -x "/usr/lib/jvm/java-21-openjdk/bin/java" ]]; then
+  JAVA_BIN="/usr/lib/jvm/java-21-openjdk/bin/java"
+elif command -v java &>/dev/null; then
+  JAVA_BIN="$(command -v java)"
+else
+  log_err "Nenhum binário Java encontrado no sistema."
   exit 1
 fi
 
-# 2. Sanity Check: Versão do Java >= 21
-JAVA_RAW_VERSION=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}')
-JAVA_MAJOR_VERSION=$(echo "${JAVA_RAW_VERSION}" | awk -F '.' '{print ($1 == "1" ? $2 : $1)}')
+JAVA_RAW=$("${JAVA_BIN}" -version 2>&1 | awk -F '"' '/version/ {print $2}')
+log_ok "Ambiente JVM: ${JAVA_BIN} (${JAVA_RAW})"
 
-if [[ "${JAVA_MAJOR_VERSION}" -lt 21 ]]; then
-  log_err "Versão do Java incompatível (${JAVA_RAW_VERSION}). PaperMC 1.21+ exige Java 21 ou superior."
-  exit 1
-fi
-log_ok "Java detectado: versão ${JAVA_RAW_VERSION} (Major: ${JAVA_MAJOR_VERSION})"
-
-# 3. Sanity Check: server.jar
 if [[ ! -f "server.jar" ]]; then
-  log_err "Arquivo 'server.jar' não encontrado no diretório raiz."
-  log_info "Execute o script de download primeiro: bash scripts/download-artifacts.sh"
+  log_err "server.jar ausente."
   exit 1
 fi
 
-# 4. Cálculo Dinâmico de RAM com Headroom para SO
 TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 TOTAL_MEM_GB=$(( TOTAL_MEM_KB / 1024 / 1024 ))
-
-# Regra: Reserva de 2GB de Headroom para SO, Metaspace, Off-heap buffers
 HEADROOM_GB=2
 
 if [[ "${TOTAL_MEM_GB}" -le "${HEADROOM_GB}" ]]; then
   ALLOC_RAM_GB=1
-  log_warn "Host com memória muito restrita (${TOTAL_MEM_GB}GB). Alocando heap mínima de 1GB."
 else
   CALCULATED_RAM=$(( TOTAL_MEM_GB - HEADROOM_GB ))
-  # Limite de segurança padrão para servidores PaperMC em host dedicado
-  if [[ "${CALCULATED_RAM}" -gt 14 ]]; then
-    ALLOC_RAM_GB=14
-  else
-    ALLOC_RAM_GB="${CALCULATED_RAM}"
-  fi
+  ALLOC_RAM_GB=$(( CALCULATED_RAM > 12 ? 12 : CALCULATED_RAM ))
 fi
 
 JVM_MEMORY="${ALLOC_RAM_GB}G"
-log_info "Memória do Host: ${TOTAL_MEM_GB}GB | Headroom SO: ${HEADROOM_GB}GB | Heap (-Xms/-Xmx): ${JVM_MEMORY}"
+log_info "Memória Host: ${TOTAL_MEM_GB}GB | Headroom: ${HEADROOM_GB}GB | Heap (-Xms/-Xmx): ${JVM_MEMORY}"
 
-# 5. Execução com Aikar's Flags formais
 AIKAR_FLAGS=(
   "-Xms${JVM_MEMORY}"
   "-Xmx${JVM_MEMORY}"
@@ -86,7 +73,8 @@ AIKAR_FLAGS=(
   "-XX:+UseStringDeduplication"
   "-Dusing.aikars.flags=https://mcflags.emc.gs"
   "-Daikars.new.flags=true"
+  "--add-modules=jdk.incubator.vector"
 )
 
-log_ok "Iniciando PaperMC Server com G1GC Otimizado..."
-exec java "${AIKAR_FLAGS[@]}" -jar server.jar --nogui
+log_ok "Iniciando PaperMC com otimizações SIMD ativas..."
+exec "${JAVA_BIN}" "${AIKAR_FLAGS[@]}" -jar server.jar --nogui

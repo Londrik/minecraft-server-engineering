@@ -38,8 +38,9 @@ validate_jar() {
 }
 
 # 1. PaperMC / Purpur 1.21.1
-log_info "Baixando PaperMC 1.21.1..."
+log_info "Verificando server.jar..."
 if [[ ! -f "${ROOT_DIR}/server.jar" ]] || [[ $(stat -c%s "${ROOT_DIR}/server.jar") -lt 40000000 ]]; then
+  log_info "Baixando Paper/Purpur 1.21.1..."
   curl -fL -H "User-Agent: ${UA}" --progress-bar "https://api.purpurmc.org/v2/purpur/1.21.1/latest/download" -o "${ROOT_DIR}/server.jar"
 fi
 validate_jar "${ROOT_DIR}/server.jar" 40
@@ -54,14 +55,12 @@ log_info "Baixando Floodgate..."
 curl -fL -H "User-Agent: ${UA}" --progress-bar "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot" -o "${PLUGINS_DIR}/Floodgate-Spigot.jar"
 validate_jar "${PLUGINS_DIR}/Floodgate-Spigot.jar" 5
 
-# 4. Spark Profiler via download API oficial
-log_info "Baixando Spark Profiler..."
-SPARK_API_RES=$(curl -sSL "https://spark.lucko.me/api/download?platform=bukkit")
-SPARK_DIRECT_URL=$(echo "$SPARK_API_RES" | jq -r '.url')
-curl -fL -H "User-Agent: ${UA}" --progress-bar "$SPARK_DIRECT_URL" -o "${PLUGINS_DIR}/spark.jar"
-validate_jar "${PLUGINS_DIR}/spark.jar" 3
+# 4. ViaVersion (Compatibilidade de protocolo entre clientes novos e servidor)
+log_info "Baixando ViaVersion estável..."
+curl -fL -H "User-Agent: ${UA}" --progress-bar "https://ci.viaversion.com/job/ViaVersion/lastSuccessfulBuild/artifact/build/libs/ViaVersion-5.2.1.jar" -o "${PLUGINS_DIR}/ViaVersion.jar" || \
+curl -fL -H "User-Agent: ${UA}" --progress-bar "https://github.com/ViaVersion/ViaVersion/releases/latest/download/ViaVersion.jar" -o "${PLUGINS_DIR}/ViaVersion.jar"
+validate_jar "${PLUGINS_DIR}/ViaVersion.jar" 2
 
-# Copia template de config do Geyser se existir
 if [[ -f "${CONFIG_DIR}/geyser/config.yml" ]]; then
   mkdir -p "${PLUGINS_DIR}/Geyser-Spigot"
   cp -n "${CONFIG_DIR}/geyser/config.yml" "${PLUGINS_DIR}/Geyser-Spigot/config.yml" || true
