@@ -1,0 +1,6 @@
+name: CorePlugin
+version: '1.0.0'
+main: com.server.core.CorePlugin
+api-version: '1.21'
+author: Henry
+description: Infrastructure core plugin with asynchronous persistence and caffeine cache.
