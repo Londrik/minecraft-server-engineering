@@ -16,63 +16,66 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGINS_DIR="${ROOT_DIR}/plugins"
 mkdir -p "${PLUGINS_DIR}"
 
-USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) mc-crossplay-installer"
+UA="Mozilla/5.0 (X11; Linux x86_64) PaperMC-Ops/1.0"
 
-# 1. Download PaperMC
-log_info "Buscando versão estável do PaperMC (1.21.x)..."
-PAPER_API_BASE="https://api.papermc.io/v2/projects/paper"
-
-PAPER_DOWNLOADED=false
-PROJECT_JSON=$(curl -sSL -H "User-Agent: ${USER_AGENT}" "${PAPER_API_BASE}" || true)
-
-if [[ -n "${PROJECT_JSON}" ]] && echo "${PROJECT_JSON}" | grep -q '"versions"'; then
-  LATEST_VERSION=$(echo "${PROJECT_JSON}" | jq -r '.versions[]' | grep '^1\.21' | tail -n 1 || true)
-  if [[ -z "${LATEST_VERSION}" || "${LATEST_VERSION}" == "null" ]]; then
-    LATEST_VERSION=$(echo "${PROJECT_JSON}" | jq -r '.versions[-1]')
+validate_jar() {
+  local file="$1"
+  local min_size_mb="$2"
+  if [[ ! -f "$file" ]]; then
+    log_err "Arquivo $file não foi criado."
+    return 1
   fi
+  local size_bytes
+  size_bytes=$(stat -c%s "$file")
+  local min_bytes=$(( min_size_mb * 1024 * 1024 ))
+  if [[ "$size_bytes" -lt "$min_bytes" ]]; then
+    log_err "$file inválido ($size_bytes bytes). Removendo..."
+    rm -f "$file"
+    return 1
+  fi
+  log_ok "$file validado com sucesso ($(numfmt --to=iec "$size_bytes"))."
+}
 
-  VERSION_JSON=$(curl -sSL -H "User-Agent: ${USER_AGENT}" "${PAPER_API_BASE}/versions/${LATEST_VERSION}" || true)
-  LATEST_BUILD=$(echo "${VERSION_JSON}" | jq -r '.builds[-1]' || true)
+# 1. Download PaperMC (1.21.1)
+log_info "Baixando PaperMC 1.21.1..."
+PAPER_SUCCESS=false
 
-  if [[ -n "${LATEST_BUILD}" && "${LATEST_BUILD}" != "null" ]]; then
-    BUILD_JSON=$(curl -sSL -H "User-Agent: ${USER_AGENT}" "${PAPER_API_BASE}/versions/${LATEST_VERSION}/builds/${LATEST_BUILD}" || true)
-    APP_JAR=$(echo "${BUILD_JSON}" | jq -r '.downloads.application.name' || true)
-    if [[ -n "${APP_JAR}" && "${APP_JAR}" != "null" ]]; then
-      DOWNLOAD_URL="${PAPER_API_BASE}/versions/${LATEST_VERSION}/builds/${LATEST_BUILD}/downloads/${APP_JAR}"
-      log_info "Baixando Paper ${LATEST_VERSION} (Build #${LATEST_BUILD})..."
-      curl -sSL -H "User-Agent: ${USER_AGENT}" --progress-bar "${DOWNLOAD_URL}" -o "${ROOT_DIR}/server.jar"
-      PAPER_DOWNLOADED=true
+# Tentativa via API oficial com User-Agent completo
+BUILD_INFO=$(curl -sSL -H "User-Agent: ${UA}" "https://api.papermc.io/v2/projects/paper/versions/1.21.1" || true)
+if echo "$BUILD_INFO" | grep -q '"builds"'; then
+  LATEST_BUILD=$(echo "$BUILD_INFO" | jq -r '.builds[-1]' || true)
+  if [[ -n "$LATEST_BUILD" && "$LATEST_BUILD" != "null" ]]; then
+    DOWNLOAD_URL="https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/${LATEST_BUILD}/downloads/paper-1.21.1-${LATEST_BUILD}.jar"
+    log_info "Baixando build #${LATEST_BUILD} do Paper..."
+    curl -fL -H "User-Agent: ${UA}" --progress-bar "$DOWNLOAD_URL" -o "${ROOT_DIR}/server.jar" || true
+    if validate_jar "${ROOT_DIR}/server.jar" 40; then
+      PAPER_SUCCESS=true
     fi
   fi
 fi
 
-if [[ "${PAPER_DOWNLOADED}" == "false" ]]; then
-  log_warn "API PaperMC indisponível ou rota descontinuada. Utilizando fallback direto para Paper 1.21..."
-  FALLBACK_URL="https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/130/downloads/paper-1.21.1-130.jar"
-  curl -sSL -H "User-Agent: ${USER_AGENT}" --progress-bar "${FALLBACK_URL}" -o "${ROOT_DIR}/server.jar" || {
-    # Fallback espelho purpur/paper build estável
-    curl -sSL --progress-bar "https://fill.papermc.io/v2/projects/paper/versions/1.21.1/builds/latest/downloads/paper-1.21.1.jar" -o "${ROOT_DIR}/server.jar"
-  }
+# Fallback direto: Purpur 1.21.1 (Drop-in replacement 100% compatível com Paper API)
+if [[ "$PAPER_SUCCESS" == "false" ]]; then
+  log_warn "API PaperMC bloqueou o tráfego. Usando fallback compatível Paper/Purpur 1.21.1..."
+  curl -fL -H "User-Agent: ${UA}" --progress-bar "https://api.purpurmc.org/v2/purpur/1.21.1/latest/download" -o "${ROOT_DIR}/server.jar"
+  validate_jar "${ROOT_DIR}/server.jar" 40
 fi
-log_ok "PaperMC salvo com sucesso em server.jar"
 
-# 2. Download GeyserMC (Paper/Spigot)
-log_info "Baixando GeyserMC (Spigot/Paper flavor)..."
-GEYSER_URL="https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
-curl -sSL -H "User-Agent: ${USER_AGENT}" --progress-bar "${GEYSER_URL}" -o "${PLUGINS_DIR}/Geyser-Spigot.jar"
-log_ok "GeyserMC salvo em plugins/Geyser-Spigot.jar"
+# 2. GeyserMC
+log_info "Baixando GeyserMC..."
+curl -fL -H "User-Agent: ${UA}" --progress-bar "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot" -o "${PLUGINS_DIR}/Geyser-Spigot.jar"
+validate_jar "${PLUGINS_DIR}/Geyser-Spigot.jar" 30
 
-# 3. Download Floodgate (Paper/Spigot)
-log_info "Baixando Floodgate (Spigot/Paper flavor)..."
-FLOODGATE_URL="https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
-curl -sSL -H "User-Agent: ${USER_AGENT}" --progress-bar "${FLOODGATE_URL}" -o "${PLUGINS_DIR}/Floodgate-Spigot.jar"
-log_ok "Floodgate salvo em plugins/Floodgate-Spigot.jar"
+# 3. Floodgate
+log_info "Baixando Floodgate..."
+curl -fL -H "User-Agent: ${UA}" --progress-bar "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot" -o "${PLUGINS_DIR}/Floodgate-Spigot.jar"
+validate_jar "${PLUGINS_DIR}/Floodgate-Spigot.jar" 5
 
-# 4. Download Spark Profiler
+# 4. Spark Profiler (Download direto do Jenkins CI oficial do LuckPerms)
 log_info "Baixando Spark Profiler..."
-SPARK_URL="https://ci.lucko.me/job/spark/lastSuccessfulBuild/artifact/spark-bukkit/build/libs/spark-bukkit.jar"
-curl -sSL -H "User-Agent: ${USER_AGENT}" --progress-bar "${SPARK_URL}" -o "${PLUGINS_DIR}/spark.jar"
-log_ok "Spark Profiler salvo em plugins/spark.jar"
+SPARK_URL="https://spark.lucko.me/download/bukkit"
+curl -fL -H "User-Agent: ${UA}" --progress-bar "$SPARK_URL" -o "${PLUGINS_DIR}/spark.jar"
+validate_jar "${PLUGINS_DIR}/spark.jar" 3
 
 chmod +x "${BASH_SOURCE[0]}"
-log_ok "Todos os artefatos foram baixados com sucesso!"
+log_ok "Todos os componentes essenciais foram baixados e validados!"
