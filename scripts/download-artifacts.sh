@@ -73,7 +73,7 @@ validate_jar "${PLUGINS_DIR}/Floodgate-Spigot.jar" 5
 
 # 4. Spark Profiler (Download direto do Jenkins CI oficial do LuckPerms)
 log_info "Baixando Spark Profiler..."
-SPARK_URL="https://ci.lucko.me/job/spark/lastSuccessfulBuild/artifact/spark-bukkit/build/libs/spark-bukkit.jar"
+SPARK_URL="https://spark.lucko.me/download/bukkit"
 curl -fL -H "User-Agent: ${UA}" --progress-bar "$SPARK_URL" -o "${PLUGINS_DIR}/spark.jar"
 validate_jar "${PLUGINS_DIR}/spark.jar" 3
 
