@@ -1,0 +1,17 @@
+bedrock:
+  address: 0.0.0.0
+  port: 19132
+  clone-remote-port: false
+  motd1: "PaperMC Crossplay"
+  motd2: "Geyser & Floodgate Engine"
+
+remote:
+  address: auto
+  port: 25565
+  auth-type: floodgate
+
+floodgate:
+  key-file: key.pem
+
+metrics:
+  enabled: false

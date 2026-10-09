@@ -14,6 +14,7 @@ log_err()   { echo -e "${C_RED}[ERRO]${C_RESET} $1"; }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGINS_DIR="${ROOT_DIR}/plugins"
+CONFIG_DIR="${ROOT_DIR}/config"
 mkdir -p "${PLUGINS_DIR}"
 
 UA="Mozilla/5.0 (X11; Linux x86_64) PaperMC-Ops/1.0"
@@ -36,30 +37,12 @@ validate_jar() {
   log_ok "$file validado com sucesso ($(numfmt --to=iec "$size_bytes"))."
 }
 
-# 1. Download PaperMC (1.21.1)
+# 1. PaperMC / Purpur 1.21.1
 log_info "Baixando PaperMC 1.21.1..."
-PAPER_SUCCESS=false
-
-# Tentativa via API oficial com User-Agent completo
-BUILD_INFO=$(curl -sSL -H "User-Agent: ${UA}" "https://api.papermc.io/v2/projects/paper/versions/1.21.1" || true)
-if echo "$BUILD_INFO" | grep -q '"builds"'; then
-  LATEST_BUILD=$(echo "$BUILD_INFO" | jq -r '.builds[-1]' || true)
-  if [[ -n "$LATEST_BUILD" && "$LATEST_BUILD" != "null" ]]; then
-    DOWNLOAD_URL="https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/${LATEST_BUILD}/downloads/paper-1.21.1-${LATEST_BUILD}.jar"
-    log_info "Baixando build #${LATEST_BUILD} do Paper..."
-    curl -fL -H "User-Agent: ${UA}" --progress-bar "$DOWNLOAD_URL" -o "${ROOT_DIR}/server.jar" || true
-    if validate_jar "${ROOT_DIR}/server.jar" 40; then
-      PAPER_SUCCESS=true
-    fi
-  fi
-fi
-
-# Fallback direto: Purpur 1.21.1 (Drop-in replacement 100% compatível com Paper API)
-if [[ "$PAPER_SUCCESS" == "false" ]]; then
-  log_warn "API PaperMC bloqueou o tráfego. Usando fallback compatível Paper/Purpur 1.21.1..."
+if [[ ! -f "${ROOT_DIR}/server.jar" ]] || [[ $(stat -c%s "${ROOT_DIR}/server.jar") -lt 40000000 ]]; then
   curl -fL -H "User-Agent: ${UA}" --progress-bar "https://api.purpurmc.org/v2/purpur/1.21.1/latest/download" -o "${ROOT_DIR}/server.jar"
-  validate_jar "${ROOT_DIR}/server.jar" 40
 fi
+validate_jar "${ROOT_DIR}/server.jar" 40
 
 # 2. GeyserMC
 log_info "Baixando GeyserMC..."
@@ -71,11 +54,18 @@ log_info "Baixando Floodgate..."
 curl -fL -H "User-Agent: ${UA}" --progress-bar "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot" -o "${PLUGINS_DIR}/Floodgate-Spigot.jar"
 validate_jar "${PLUGINS_DIR}/Floodgate-Spigot.jar" 5
 
-# 4. Spark Profiler (Download direto do Jenkins CI oficial do LuckPerms)
+# 4. Spark Profiler via download API oficial
 log_info "Baixando Spark Profiler..."
-SPARK_URL="https://spark.lucko.me/download/bukkit"
-curl -fL -H "User-Agent: ${UA}" --progress-bar "$SPARK_URL" -o "${PLUGINS_DIR}/spark.jar"
+SPARK_API_RES=$(curl -sSL "https://spark.lucko.me/api/download?platform=bukkit")
+SPARK_DIRECT_URL=$(echo "$SPARK_API_RES" | jq -r '.url')
+curl -fL -H "User-Agent: ${UA}" --progress-bar "$SPARK_DIRECT_URL" -o "${PLUGINS_DIR}/spark.jar"
 validate_jar "${PLUGINS_DIR}/spark.jar" 3
 
+# Copia template de config do Geyser se existir
+if [[ -f "${CONFIG_DIR}/geyser/config.yml" ]]; then
+  mkdir -p "${PLUGINS_DIR}/Geyser-Spigot"
+  cp -n "${CONFIG_DIR}/geyser/config.yml" "${PLUGINS_DIR}/Geyser-Spigot/config.yml" || true
+fi
+
 chmod +x "${BASH_SOURCE[0]}"
-log_ok "Todos os componentes essenciais foram baixados e validados!"
+log_ok "Todos os artefatos validados com sucesso!"
